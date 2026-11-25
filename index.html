@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fossil Heist — Field Scanner</title>
+<style>
+  :root{--cy:#5ef2ff;--bg:#04121a;--ink:#d9fbff;--dim:#7fb3bd;--team:#5ef2ff}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace}
+  button,input{font:inherit}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column}
+  .screen.on{display:flex}
+  #intro{padding:24px 20px;gap:14px;overflow:auto;background:radial-gradient(circle at 50% 0,#0d3440,#04121a 70%)}
+  h1{font-size:26px;margin:8px 0 0;letter-spacing:2px;color:var(--cy)}
+  .sub{color:var(--dim);font-size:13px;letter-spacing:1px}
+  .teams{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .teams button{padding:18px 8px;border-radius:12px;border:2px solid currentColor;background:#0007;font-size:18px;font-weight:700;letter-spacing:1px}
+  .card{border:1px solid #5ef2ff55;border-radius:12px;padding:14px;background:#0a2630aa;line-height:1.5}
+  .card b{color:var(--team)}
+  .big{width:100%;padding:16px;border:0;border-radius:12px;background:var(--team);color:#021;font-weight:800;font-size:18px;letter-spacing:1px}
+  #scan{background:#000}
+  video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  canvas{display:none}
+  .hud{position:absolute;inset:0;pointer-events:none}
+  .corner{position:absolute;width:54px;height:54px;border:3px solid var(--cy);opacity:.85}
+  .tl{top:70px;left:18px;border-right:0;border-bottom:0}.tr{top:70px;right:18px;border-left:0;border-bottom:0}
+  .bl{bottom:150px;left:18px;border-right:0;border-top:0}.br{bottom:150px;right:18px;border-left:0;border-top:0}
+  .sweep{position:absolute;left:18px;right:18px;height:2px;background:linear-gradient(90deg,transparent,var(--cy),transparent);top:70px;animation:sw 2.6s linear infinite;opacity:.7}
+  @keyframes sw{to{top:calc(100% - 150px)}}
+  .topbar{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(#000c,#0000);font-size:12px;letter-spacing:1px;pointer-events:auto}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#f33;margin-right:6px;animation:bl 1s steps(2) infinite}
+  @keyframes bl{50%{opacity:0}}
+  .bottom{position:absolute;left:0;right:0;bottom:0;padding:10px 12px calc(env(safe-area-inset-bottom) + 12px);background:linear-gradient(#0000,#000d 30%);pointer-events:auto}
+  .q{font-size:13px;line-height:1.4;margin-bottom:8px;color:#fff}
+  .row{display:flex;gap:8px}
+  .row input{flex:1;min-width:0;padding:12px;border-radius:10px;border:1px solid #5ef2ff88;background:#021c;color:#fff;text-transform:uppercase;letter-spacing:2px}
+  .row button{padding:12px 14px;border-radius:10px;border:1px solid var(--cy);background:#5ef2ff22;color:var(--cy);font-weight:700}
+  .log{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .log span{font-size:11px;padding:4px 8px;border-radius:20px;border:1px solid #5ef2ff66;color:var(--cy);pointer-events:auto}
+  #holo{position:absolute;width:min(86vw,340px);transform:translate(-50%,-50%);pointer-events:auto;display:none;z-index:3;
+        border:1px solid var(--cy);border-radius:14px;padding:14px 14px 12px;background:rgba(6,40,52,.82);
+        box-shadow:0 0 24px #5ef2ff88,inset 0 0 30px #5ef2ff33;color:#eaffff;animation:flick 3s infinite}
+  #holo::before{content:"";position:absolute;inset:0;border-radius:14px;background:repeating-linear-gradient(0deg,#5ef2ff14 0 2px,transparent 2px 5px);pointer-events:none}
+  #holo.pop{animation:pop .45s ease-out,flick 3s infinite .45s}
+  @keyframes pop{from{opacity:0;transform:translate(-50%,-30%) scale(.6)}}
+  @keyframes flick{0%,96%,100%{opacity:1}97%{opacity:.55}98%{opacity:1}99%{opacity:.7}}
+  #holo h2{margin:0 0 2px;font-size:20px;color:var(--cy);letter-spacing:1px;padding-right:84px}
+  #hbody{position:relative}
+  #holo .no{position:absolute;top:0;right:0;text-align:center;font-size:10px;color:var(--dim)}
+  #holo .no b{display:block;font-size:34px;color:#fff;line-height:1;text-shadow:0 0 12px var(--cy)}
+  #holo dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:10px 0 8px;font-size:13px}
+  #holo dt{color:var(--dim)} #holo dd{margin:0}
+  #holo .fact{font-size:12px;color:#bfefff;border-top:1px dashed #5ef2ff55;padding-top:6px}
+  #hstage{position:relative;height:235px;margin:-4px -4px 6px;perspective:800px;overflow:hidden;display:none}
+  #hstage .beam{position:absolute;left:12%;right:12%;bottom:14px;height:85%;background:linear-gradient(0deg,#5ef2ff40,#5ef2ff00);clip-path:polygon(18% 100%,82% 100%,100% 0,0 0);opacity:.55}
+  #hstage .pad{position:absolute;left:50%;bottom:6px;width:66%;height:22px;margin-left:-33%;border-radius:50%;border:2px solid #5ef2ffcc;box-shadow:0 0 18px #5ef2ff,inset 0 0 14px #5ef2ff88}
+  #hstage .bob{position:absolute;inset:4px 6px 22px;animation:bob 3.2s ease-in-out infinite}
+  #hstage .spin{position:absolute;inset:0;transform-style:preserve-3d;animation:turn 7s ease-in-out infinite}
+  #hstage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:brightness(1.2) saturate(1.2) drop-shadow(0 0 10px #5ef2ffaa)}
+  #hstage img.ghost{opacity:.35;filter:hue-rotate(40deg) blur(.6px);animation:ghost 3.7s steps(1) infinite}
+  #hstage .sweep2{position:absolute;left:0;right:0;height:26px;top:-30px;background:linear-gradient(#5ef2ff00,#5ef2ff55,#5ef2ff00);mix-blend-mode:screen;animation:sweep2 2.8s linear infinite}
+  #hstage.mat .spin{animation:mat .9s ease-out,turn 7s ease-in-out .9s infinite}
+  @keyframes turn{0%,100%{transform:rotateY(-24deg) scale(1.08)}50%{transform:rotateY(24deg) scale(1.08)}}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  @keyframes ghost{0%,88%{transform:translateX(2px)}90%{transform:translateX(-6px) skewX(8deg)}94%{transform:translateX(5px)}100%{transform:translateX(2px)}}
+  @keyframes sweep2{to{top:110%}}
+  @keyframes mat{from{clip-path:inset(100% 0 0 0);filter:brightness(4)}to{clip-path:inset(0 0 0 0);filter:brightness(1)}}
+  #holo .ring{position:absolute;left:50%;top:-34px;width:60px;height:60px;margin-left:-30px;border:2px solid var(--cy);border-radius:50%;border-top-color:transparent;animation:spin 1.6s linear infinite;opacity:.8}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .msg{pointer-events:auto;position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);padding:16px 18px;border-radius:12px;background:#000c;border:1px solid #f66;color:#fcc;max-width:86vw;display:none;line-height:1.5;font-size:14px}
+</style>
+</head>
+<body>
+<section id="intro" class="screen on">
+  <div class="sub">MUSEUM SECURITY · LAB 5</div>
+  <h1>FIELD SCANNER</h1>
+  <div class="card">A priceless specimen has been stolen from the fossil collection. Scan the specimen tags around the lab to read their records.</div>
+  <div class="sub">CHOOSE YOUR TEAM</div>
+  <div class="teams" id="teamBtns"></div>
+  <div class="card" id="mission" style="display:none"></div>
+  <button class="big" id="go" style="display:none">START SCANNER</button>
+  <div class="sub" style="text-align:center">No camera? Type the code printed under each tag instead.</div>
+</section>
+
+<section id="scan" class="screen">
+  <video id="v" playsinline muted autoplay></video>
+  <canvas id="c"></canvas>
+  <div class="hud"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div><div class="sweep"></div></div>
+  <div class="topbar"><span><span class="dot"></span>SCANNING</span><span id="teamTag"></span><span id="back" style="pointer-events:auto;text-decoration:underline">MISSION</span></div>
+  <div id="holo"><div id="hstage"><div class="beam"></div><div class="bob"><div class="spin"><img id="himg" alt=""><img id="hghost" class="ghost" alt=""></div></div><div class="pad"></div><div class="sweep2"></div></div><div id="hbody"></div></div>
+  <div class="msg" id="err"></div>
+  <div class="bottom">
+    <div class="q" id="qline"></div>
+    <div class="row"><input id="manual" placeholder="TYPE TAG CODE" autocomplete="off" autocapitalize="characters"><button id="mgo">OPEN</button></div>
+    <div class="log" id="log"></div>
+  </div>
+</section>
+
+<script src="data.js"></script>
+<script src="assets/lib/jsQR.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const FHD=window.FH; let team=null, seen=JSON.parse(localStorage.getItem('fh-seen')||'[]');
+const tb=$('#teamBtns');
+for(const [k,t] of Object.entries(FHD.teams)){
+  const b=document.createElement('button'); b.textContent=t.name.toUpperCase(); b.style.color=t.colour;
+  b.onclick=()=>pickTeam(k); tb.appendChild(b);
+}
+function pickTeam(k){
+  team=k; const t=FHD.teams[k]; localStorage.setItem('fh-team',k);
+  document.documentElement.style.setProperty('--team',t.colour);
+  $('#mission').style.display='block';
+  $('#mission').innerHTML=`<b>TEAM ${t.name.toUpperCase()} · STATION A</b><br>${FHD.questionA[k]}<br><br>Scan every tag. Find the matching specimen. Its <b>SPECIMEN No.</b> is your Station A digit.`;
+  $('#go').style.display='block'; $('#teamTag').textContent='TEAM '+t.name.toUpperCase(); $('#teamTag').style.color=t.colour;
+  $('#qline').textContent=FHD.questionA[k];
+}
+const saved=localStorage.getItem('fh-team'); if(saved&&FHD.teams[saved]) pickTeam(saved);
+
+let stream=null, detector=null, running=false;
+$('#go').onclick=start;
+$('#back').onclick=()=>{ $('#scan').classList.remove('on'); $('#intro').classList.add('on'); stop(); };
+async function start(){
+  Object.keys(FHD.specimens).forEach(c=>{ const i=new Image(); i.src='assets/holo/'+c+'-a.png'; });
+  $('#intro').classList.remove('on'); $('#scan').classList.add('on'); renderLog();
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    const v=$('#v'); v.srcObject=stream; await v.play();
+    if('BarcodeDetector' in window){ try{ detector=new BarcodeDetector({formats:['qr_code']}); }catch(e){detector=null} }
+    running=true; loop();
+  }catch(e){
+    const m=$('#err'); m.style.display='block';
+    m.innerHTML='Camera not available ('+(e.name||'error')+').<br>Allow camera access in your browser settings, or type the code printed under each tag below.';
+  }
+}
+function stop(){ running=false; if(stream){stream.getTracks().forEach(t=>t.stop()); stream=null;} }
+
+const cv=$('#c'), cx=cv.getContext('2d',{willReadFrequently:true});
+let lastHit=0, current=null, busy=false;
+async function loop(){
+  if(!running) return;
+  const v=$('#v');
+  if(v.readyState>=2 && !busy){
+    busy=true;
+    try{
+      let hit=null;
+      if(detector){
+        let r=[]; try{ r=await detector.detect(v); }catch(e){ detector=null; }
+        if(r.length){ const p=r[0].cornerPoints; hit={text:r[0].rawValue,cxp:p.reduce((a,b)=>a+b.x,0)/p.length,cyp:p.reduce((a,b)=>a+b.y,0)/p.length,w:v.videoWidth,h:v.videoHeight}; }
+      } else if(window.jsQR){
+        const w=Math.min(960,v.videoWidth||960), h=Math.round(w*v.videoHeight/v.videoWidth)||540; cv.width=w; cv.height=h;
+        cx.drawImage(v,0,0,w,h); const img=cx.getImageData(0,0,w,h);
+        const r=jsQR(img.data,w,h,{inversionAttempts:'dontInvert'});
+        if(r){ const L=r.location; hit={text:r.data,cxp:(L.topLeftCorner.x+L.bottomRightCorner.x)/2,cyp:(L.topLeftCorner.y+L.bottomRightCorner.y)/2,w,h}; }
+      }
+      if(hit) onHit(hit);
+      else if(current && Date.now()-lastHit>2500){ /* keep card visible but stop tracking */ }
+    }catch(e){}
+    busy=false;
+  }
+  requestAnimationFrame(loop);
+}
+function mapToScreen(hit){
+  // video uses object-fit:cover -> map frame coords to screen coords
+  const W=innerWidth,H=innerHeight, s=Math.max(W/hit.w,H/hit.h);
+  const ox=(W-hit.w*s)/2, oy=(H-hit.h*s)/2;
+  return {x:hit.cxp*s+ox, y:hit.cyp*s+oy};
+}
+function codeFrom(text){ const t=(text||'').trim().toUpperCase(); return t.startsWith('FH:')?t.slice(3):t; }
+function onHit(hit){
+  const code=codeFrom(hit.text); if(!FHD.specimens[code]) return;
+  lastHit=Date.now(); const p=mapToScreen(hit);
+  show(code, p.x, Math.min(Math.max(p.y,300), innerHeight-340));
+}
+function show(code,x,y){
+  const s=FHD.specimens[code], h=$('#holo'); $('#err').style.display='none';
+  if(current!==code){
+    current=code;
+    $('#hbody').innerHTML=`<div class="no">SPECIMEN No.<b>${s.no}</b></div>
+      <div class="sub">RECORD ${code}</div><h2>${s.name.toUpperCase()}</h2>
+      <dl><dt>Flew?</dt><dd>${s.flew}</dd><dt>Teeth</dt><dd>${s.teeth}</dd><dt>Period</dt><dd>${s.period}</dd>
+      <dt>Diet</dt><dd>${s.diet}</dd><dt>Status</dt><dd>${s.alive}</dd><dt>Legs</dt><dd>${s.legs}</dd><dt>Blood</dt><dd>${s.blood}</dd></dl>
+      <div class="fact">${s.fact}</div>`;
+    const st=$('#hstage'), src='assets/holo/'+code+'-a.png';
+    $('#himg').onerror=()=>{ st.style.display='none'; };
+    $('#himg').src=src; $('#hghost').src=src; st.style.display='block';
+    st.classList.remove('mat'); void st.offsetWidth; st.classList.add('mat');
+    h.classList.remove('pop'); void h.offsetWidth; h.classList.add('pop');
+    if(navigator.vibrate) navigator.vibrate(60);
+    beep();
+    if(!seen.includes(code)){ seen.push(code); localStorage.setItem('fh-seen',JSON.stringify(seen)); renderLog(); }
+  }
+  h.style.display='block'; h.style.left=(x??innerWidth/2)+'px'; h.style.top=(y??Math.max(300,innerHeight*0.45))+'px';
+}
+$('#err').onclick=()=>{ $('#err').style.display='none'; };
+$('#holo').onclick=()=>{ $('#holo').style.display='none'; current=null; };
+function manual(){ const c=codeFrom($('#manual').value); if(FHD.specimens[c]){ show(c); $('#manual').value=''; $('#manual').blur(); } else { $('#manual').value=''; $('#manual').placeholder='UNKNOWN CODE'; } }
+$('#mgo').onclick=manual; $('#manual').onkeydown=e=>{ if(e.key==='Enter') manual(); };
+function renderLog(){
+  const l=$('#log'); l.innerHTML='';
+  const n=Object.keys(FHD.specimens).length;
+  const head=document.createElement('span'); head.textContent=`LOGGED ${seen.length}/${n}`; head.style.borderColor='#fff6'; head.style.color='#fff'; l.appendChild(head);
+  seen.forEach(c=>{ const s=document.createElement('span'); s.textContent=FHD.specimens[c].name; s.onclick=()=>show(c); l.appendChild(s); });
+}
+let ac=null;
+function beep(){ try{ ac=ac||new (window.AudioContext||window.webkitAudioContext)(); const o=ac.createOscillator(), g=ac.createGain();
+  o.type='sine'; o.frequency.setValueAtTime(880,ac.currentTime); o.frequency.exponentialRampToValueAtTime(1760,ac.currentTime+.12);
+  g.gain.setValueAtTime(.12,ac.currentTime); g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.25);
+  o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime+.26);}catch(e){} }
+</script>
+</body>
+</html>
